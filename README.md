@@ -21,28 +21,39 @@ This project is an interactive Python-based GUI application for labeling images,
 
 1. **Clone the Repository**
    ```bash
-   git clone https://github.com/yourusername/your-repo-name.git
-   cd your-repo-name
+   git clone https://github.com/vashisthachoudhary/Image-Labeling-and-Model-Training-Toolkit.git
+   cd Image-Labeling-and-Model-Training-Toolkit
 
-Install Dependencies Install the required Python packages using pip:
+3. **Install Required Dependencies**
+   Install all necessary Python packages:
+   ```bash
+   pip install -r requirements.txt
+   ```
+   The requirements.txt file includes:
+   ```bash
+   numpy
+   pandas
+   scipy
+   matplotlib
+   scikit-learn
+   tensorflow
+   pillow
+   joblib
+   tk
+   ```
 
-bash
-Copy code
-pip install -r requirements.txt
-Example requirements:
-
-plaintext
-Copy code
-numpy
-pandas
-matplotlib
-scikit-learn
-tensorflow
-pillow
-joblib
-tk
-Run the Application
-
-bash
-Copy code
-python main.py
+## Usage
+### Step 1: Label Images
+1. Open the application.
+2. Load images and use the paintbrush tool to annotate objects.
+3. Save labeled images for training purposes.
+### Step 2: Train a Model
+1. Select a training algorithm:
+- CNN: For deep learning-based segmentation.
+- Random Forest: Machine learning with hyperparameter tuning.
+- Logistic Regression: Simple classification-based approach.
+2. Configure any desired hyperparameters.
+3. Train the model and review the performance metrics.
+### Step 3: Test a Model
+1. Load a new image into the application.
+2. un predictions and view the results with labeled outputs.
