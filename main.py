@@ -24,6 +24,7 @@ import cv2
 from tensorflow.keras.models import load_model
 import albumentations as A
 import tensorflow as tf
+from xgboost import XGBClassifier
 # from albumentations.pytorch.transforms import ToTensorV2  # For PyTorch compatibility
 class bcolors:
     HEADER = '\033[95m'
@@ -96,7 +97,7 @@ class ImageLabelingApp:
         # Model selection dropdown
         self.model_var = tk.StringVar()
         self.model_var.set("CNN")  # Default value
-        self.model_dropdown = ttk.Combobox(root, textvariable=self.model_var, values=["Random Forest", "Logistic Regression", "CNN"])
+        self.model_dropdown = ttk.Combobox(root, textvariable=self.model_var, values=["CNN", "Random Forest", "Logistic Regression", "XGBoost"])
         self.model_dropdown.grid(row=1, column=6, padx=10, pady=10)
 
         # Brush size selection
@@ -320,12 +321,12 @@ class ImageLabelingApp:
                     mask_array = np.where(np.array(mask) == 255, 0, 1).astype(np.float32)
                     mask_array = np.expand_dims(mask_array, axis=-1)  # Ensure (H, W, 1)
                     # Convert back to a PIL Image for saving
-                    mask.save(r"C:\Users\Asus\OneDrive\Desktop\testing\ImageLabelingAndTrainingToolkit\temp\processed_mask2.png")
-                    label_image_pil = Image.fromarray((mask_array.squeeze() * 255).astype(np.uint8), mode='L')
+                    # mask.save(r"C:\Users\Asus\OneDrive\Desktop\testing\ImageLabelingAndTrainingToolkit\temp\processed_mask2.png")
+                    # label_image_pil = Image.fromarray((mask_array.squeeze() * 255).astype(np.uint8), mode='L')
                     
                     # Save the processed mask with a complete path
-                    save_path = r"C:\Users\Asus\OneDrive\Desktop\testing\ImageLabelingAndTrainingToolkit\temp\processed_mask.png"
-                    label_image_pil.save(save_path)
+                    # save_path = r"C:\Users\Asus\OneDrive\Desktop\testing\ImageLabelingAndTrainingToolkit\temp\processed_mask.png"
+                    # label_image_pil.save(save_path)
                     
                     # Append original images and masks
                     original_images.append(img_array)
@@ -386,7 +387,7 @@ class ImageLabelingApp:
             print(f"{bcolors.OKBLUE}Extracted Images & Masks{bcolors.ENDC}")
 
             # Train CNN
-            def create_cnn_model(learning_rate = 0.0001, filters=64, kernel_size=(3, 3), depth=3):
+            def create_cnn_model(learning_rate = 0.0001, filters=32, kernel_size=(3, 3), depth=6):
                 model = Sequential()
 
                 # Initial Conv and Pool layers
@@ -595,7 +596,7 @@ class ImageLabelingApp:
                     validation_data=val_gen,
                     validation_steps=validation_steps,
                     epochs=10,
-                    batch_size=32,
+                    batch_size=64,
                 )
                 print("Model training completed.")
                 model_CNN = model
@@ -610,25 +611,23 @@ class ImageLabelingApp:
             print(f"{bcolors.OKBLUE}Selected model {model_choice}{bcolors.ENDC}")
             use_hyperparam_tuning = self.hyperparam_var.get() == "Yes"
             print(f"{bcolors.OKBLUE}Hyperparameter tuning: {use_hyperparam_tuning}{bcolors.ENDC}")
-            def augment_data(self, images, segmentation_maps, aug_count=2):
-                augmented_images = []
-                augmented_masks = []
+            def hyperparameter_tuning_xgb(X_train, y_train):
+                param_dist = {
+                    'n_estimators': randint(50, 300),
+                    'max_depth': randint(3, 10),
+                    'learning_rate': loguniform(0.01, 0.3),
+                    'subsample': loguniform(0.5, 1.0),
+                    'colsample_bytree': loguniform(0.5, 1.0),
+                }
+                xgb = XGBClassifier(use_label_encoder=False, eval_metric='logloss', random_state=42)
+                random_search = RandomizedSearchCV(
+                    estimator=xgb, param_distributions=param_dist, n_iter=10,
+                    scoring='accuracy', cv=3, verbose=1, random_state=42, n_jobs=-1
+                )
+                random_search.fit(X_train, y_train)
+                return random_search.best_estimator_, random_search.cv_results_
+            
 
-                # Apply augmentation to each image and mask in the batch
-                for img, mask in zip(images, segmentation_maps):
-                    for _ in range(aug_count):
-                        # Apply augmentation to the image and mask
-                        augmented = augmentation(image=img, mask=mask)
-                        augmented_images.append(augmented['image'])
-                        augmented_masks.append(augmented['mask'])
-
-                # Convert lists to numpy arrays
-                # augmented_images = np.array(augmented_images)
-                # augmented_masks = np.array(augmented_masks)
-
-                # print(f"Augmented data shape: {augmented_images.shape[0]}")  # This should always be batch_size * aug_count
-
-                return augmented_images, augmented_masks
             def data_augmentation(img_array, mask_array, num_augmentations=2):
                 augmented_images, augmented_masks = [], []
 
@@ -695,7 +694,7 @@ class ImageLabelingApp:
                 random_search.fit(X_train, y_train)
                 return random_search.best_estimator_, random_search.cv_results_
 
-            if model_choice in ["Random Forest", "Logistic Regression"]:
+            if model_choice in ["Random Forest", "Logistic Regression", "XGBoost"]:
                 mask_paths, image_paths = [], []
                 for img_path in self.image_list:
                     mask_path = img_path.replace(".jpeg", "_label.png")
@@ -721,6 +720,11 @@ class ImageLabelingApp:
                         model, cv_results = hyperparameter_tuning_lr(X_train, y_train)
                     else:
                         model = LogisticRegression(max_iter=1000, random_state=42).fit(X_train, y_train)
+                elif model_choice == "XGBoost":
+                    if use_hyperparam_tuning:
+                        model, cv_results = hyperparameter_tuning_xgb(X_train, y_train)
+                    else:
+                        model = XGBClassifier(use_label_encoder=False, eval_metric='logloss', random_state=42).fit(X_train, y_train)
 
                 accuracy = model.score(X_test, y_test)
                 print(f"Model trained with accuracy: {accuracy}")
@@ -785,10 +789,7 @@ class ImageLabelingApp:
         # Release resources
         cap.release()
         cv2.destroyAllWindows()
-
-
-
-
+    
     def test_image(self):
         if not self.model_path:
             print("Please select a model file first.")
@@ -798,6 +799,9 @@ class ImageLabelingApp:
         test_image_path = filedialog.askopenfilename(title="Select Test Image", filetypes=[("Image Files", "*.png;*.jpg;*.jpeg")])
         if test_image_path:
             test_image_array = self.preprocess_image(test_image_path)
+
+            # Load the original image for visualization
+            original_image = Image.open(test_image_path).resize((500, 500)).convert("RGBA")
 
             # Determine the model file type
             model_file = self.model_path
@@ -809,10 +813,6 @@ class ImageLabelingApp:
                 predictions = model.predict(np.expand_dims(test_image_array, axis=0))
                 predicted_label = (predictions > 0.5).astype(np.uint8).squeeze()
 
-                # Convert prediction to an image and display
-                label_image_pil = Image.fromarray((predicted_label * 255).astype(np.uint8), mode='L')
-                self.show_prediction(label_image_pil.resize((500, 500)))
-            
             elif file_extension == 'pkl':
                 # Load other models (e.g., SVM, Random Forest, Logistic Regression)
                 model = joblib.load(model_file)
@@ -825,21 +825,30 @@ class ImageLabelingApp:
                 prediction = model.predict(pixel_data)
 
                 # Reshape prediction to match the image size
-                predicted_label = prediction.reshape(Resolution, Resolution)
-
-                # Convert prediction to an image and display
-                label_image_pil = Image.fromarray((predicted_label * 255).astype(np.uint8), mode='L')
-                self.show_prediction(label_image_pil.resize((500, 500)))
+                predicted_label = prediction.reshape(test_image_array.shape[:2])
 
             else:
                 print("Unsupported model file type!")
+                return
+    
+            # Create a green mask where the prediction is 1 (predicted object area)
+            mask = Image.fromarray((predicted_label * 255).astype(np.uint8), mode='L').resize((500, 500))
+    
+            # Create a fully green image (RGBA) where green is applied only where the mask is 1
+            green_mask = Image.new("RGBA", mask.size, (0, 255, 0, 0))  # Fully transparent image
+            green_mask.paste((0, 255, 0, 128), mask=mask)  # Paste green with transparency only where mask is 1
+    
+            # Blend the green mask with the original image (only where the object is)
+            blended_image = Image.alpha_composite(original_image.convert("RGBA"), green_mask)
+    
+            # Display the blended image
+            self.show_prediction(blended_image)
 
-    # (Other methods, such as `preprocess_image` and `show_prediction`, remain unchanged)
     def show_prediction(self, combined_image):
         # Create a new window to display the labeled image
         prediction_window = tk.Toplevel(self.root)
         prediction_window.title("Prediction Result")
-        
+
         tk_image = ImageTk.PhotoImage(combined_image)
         canvas = tk.Canvas(prediction_window, width=500, height=500)
         canvas.pack()
